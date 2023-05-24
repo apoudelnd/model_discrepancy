@@ -1,0 +1,9 @@
+./venv
+exp/plots/
+exp/results
+results/
+exp/text_faiss.index
+exp/image_faiss.index
+exp/data.pt
+zz.py
+coco.sh
