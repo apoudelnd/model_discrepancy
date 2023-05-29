@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KernelDensity
 import seaborn as sns
+import os
 # import sys
 # sys.path.append('./')
-
 
 print("Loading data ...")
 # Load the saved dictionary using torch.load
@@ -34,15 +34,55 @@ def euclidean_dist(image_simmilarity, text_similarity):
 def img_text_sim(image_similarity, text_similarity):
     return cosine_similarity(image_similarity, text_similarity)
 
-# def neighbor_sim_exact_neigh(image_similarity, text_similarity):
+def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets):
 
-#     top_k = 5
+    top_k = 60
+    normalized_sims = []
 
+    for i in range(id_tensor.shape[0]):
+        # print(id_tensor[i])
+        # print(image_similarity[i])
+        # exit()
+        image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k, largest=True)
+        image_neighbors_indices = image_nearest_neighbors.indices
+        image_top_k_values = image_similarity[i][image_neighbors_indices]
 
-#     for i in range(id_tensor.shape[0]):
-#         image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k, largest=True)
-#         image_neighbors_indices = image_nearest_neighbors.indices
+        image_embeddings = image_tensor[image_neighbors_indices]
+        text_embeddings = text_tensor[image_neighbors_indices]
+        similarities = cosine_similarity(image_embeddings, text_embeddings)
+        # print(similarities)
 
+        similarities_tensor = torch.from_numpy(similarities)
+
+        diagonal_sum = torch.diag(similarities_tensor).sum()
+
+        for sim in torch.diag(similarities_tensor):
+            # Calculate the normalized similarity value
+            normalized_sim = sim / diagonal_sum
+            normalized_sims.append(normalized_sim)  # Add t
+        
+    # Flatten the normalized_sims list
+    flattened_sims = np.array(normalized_sims).flatten()
+    normalized_flattened_sims = (flattened_sims - np.min(flattened_sims)) / (np.max(flattened_sims) - np.min(flattened_sims))
+
+    # print(sim)
+    plt.figure()
+
+    # Create distribution plot
+    sns.set_style('darkgrid')
+
+    # sns.distplot(flattened_sims, kde=True, rug=True)
+
+    sns.distplot(normalized_flattened_sims, kde=True, rug=True)
+
+    # Plotting the distribution of normalized similarity values
+    # plt.hist(flattened_sims, bins=10)  # Adjust the number of bins as needed
+    plt.xlabel('Normalized Similarity')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Normalized Similarity')
+    plt.savefig(f'histogram_{sets}_{top_k}.png')
+    # plt.show()
+    
 
 
 def neighbor_sim(image_similarity, text_similarity):
@@ -60,9 +100,6 @@ def neighbor_sim(image_similarity, text_similarity):
     print("Top 5 neigbors, and the ratio - processing....")
 
     for i, j in zip(range(image_tensor.shape[0]), range(text_tensor.shape[0])):
-
-        # print("looop")
-        # print(i,j)
 
         image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k, largest=True)
         image_neighbors_indices = image_nearest_neighbors.indices
@@ -99,13 +136,6 @@ def norm_exp(image_similarity, text_similarity):
     # Calculate the ratio of image similarity to text similarity
     similarity_ratio = image_similarity / text_similarity
 
-    #using sigmoid to constraint the range from 0-1
-    # sigmoid_similarity_ratio = sigmoid_list(similarity_ratio.flatten())
-
-    # distance_ratio = euclidean_dist(image_similarity, text_similarity)
-
-    # sigmoid_dist_ratio = sigmoid_list(distance_ratio.flatten())
-
     return similarity_ratio
 
 
@@ -126,28 +156,42 @@ def plot_dist(ratio, exp_type, sets, cal_type):
     plt.ylabel('Density')
     plt.title('Neighbors distribuition')
     #maybe write a function later for making dir - done manually for now
-    plt.savefig(f'./plots/{exp_type}/n_{sets}_{cal_type}.png')
+    out_path = f'./plot_f/{exp_type}/n_{sets}'
+    # path = os.path.join(out_path, f'{cal_type}.png')
+    
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    f_path = os.path.join(out_path, f'{cal_type}.png')
+    # plt.savefig(f'./plot_f/{exp_type}/n_{sets}_{cal_type}.png')
+    plt.savefig(f_path)
 
 
 #train's already done! work on test and validation for now!!
-for sets in ['test', 'validation']:
+for sets in ['train', 'test', 'validation']:
 
     print(f"Working on {sets} set")
 
-    loaded_data = torch.load(f'../results/{sets}_data.pt')
+    loaded_data = torch.load(f'../results_f/{sets}_data.pt')
     id_tensor = loaded_data['ids']
     image_tensor = loaded_data['image_embeddings']
     text_tensor = loaded_data['text_embeddings']
+    sent_id = loaded_data['sentid']
 
 
     # Calculate cosine similarity between image embeddings
     image_similarity = cosine_similarity(image_tensor)
-    print(image_similarity.shape)
-    print(image_similarity.shape[0])  
-
+    
+    # print(image_similarity)
+    # print(image_similarity[0])
+    # print(image_similarity.shape[0])  
+    # exit()
     # Calculate cosine similarity between text embeddings
     text_similarity = cosine_similarity(text_tensor)
 
+    neighbor_sim_exact_neigh(image_similarity, text_similarity, sets)
+
+    exit()
 
     #for top 5 neighbors experiment
     ratio = neighbor_sim(image_similarity, text_similarity)

@@ -13,6 +13,8 @@ import pandas as pd
 from dataloader import COCODataset, create_data_loader
 import datetime
 import pandas
+import torch.multiprocessing as mp
+mp.set_sharing_strategy('file_system')
 
 
 from datasets import load_dataset
@@ -25,10 +27,13 @@ from datasets import load_dataset
 # dataset = load_dataset("nlphuji/mscoco_2014_5k_test_image_text_retrieval")
 
 dataset = load_dataset("HuggingFaceM4/COCO")
+# print(dataset)
+# print(dataset['test'][:10])
+# exit()
 # Drop duplicates based on one colum
 
-def get_data_loaders(dataset, batch_size = 16):
-    data_loader = create_data_loader(dataset, batch_size = 16)
+def get_data_loaders(dataset, batch_size = 20):
+    data_loader = create_data_loader(dataset, batch_size = 20)
     return data_loader
 
 # data_loader = create_data_loader(dataset['test'], batch_size = 16)
@@ -47,6 +52,14 @@ def preprocess_image(img_fpath):
 def preprocess_text(text):
     return processor(text, padding=True, max_length=77, truncation=True, return_tensors="pt")
 
+def keep_first_occurrence(lst):
+    seen = {}
+    result = []
+    for item in lst:
+        if item not in seen:
+            result.append(item)
+            seen[item] = True
+    return result
 
 def main(data_loader, sets):
 
@@ -73,23 +86,24 @@ def main(data_loader, sets):
         caption = batch['caption']
         sentid = batch['sentid']
 
-        #remove duplicates
-        cocoid, unique_index = torch.unique(cocoid, sorted=False, return_inverse=True)
+        set_ids = set()
+        cocoidf = list()
+        image_fpath = list()
+        captionf = list()
+        sentidf = list()
 
-        # print(cocoid)
-        #since there are 5 different text for an image - we only take the first one! -- 
-        u_i = set(unique_index.tolist())
-        # exit()
-        image_path = [image_path[i] for i in u_i]
-        caption = [caption[i] for i in u_i]
-        sentid = [sentid[i] for i in u_i]
+        for i, idx in enumerate(cocoid.tolist()):
+            if idx not in set_ids:
+                set_ids.add(idx)
+
+                cocoidf.append(cocoid[i])
+                image_fpath.append(image_path[i])
+                captionf.append(caption[i])
+                sentidf.append(sentid[i])
         
-        # image_inputs = preprocess_image(image_path)
-        # print(image_path)
-        # exit()
-        image_inputs = [preprocess_image(img) for img in image_path]
+        image_inputs = [preprocess_image(img) for img in image_fpath]
 
-        text_inputs = preprocess_text(caption)
+        text_inputs = preprocess_text(captionf)
 
         image_inputs = torch.stack([x['pixel_values'] for x in image_inputs])
         image_inputs = image_inputs.squeeze(1)
@@ -98,8 +112,8 @@ def main(data_loader, sets):
             image_features = model.get_image_features(image_inputs)
             text_features = model.get_text_features(**text_inputs)
         
-        caption_ids.extend(sentid)
-        ids.extend(cocoid)
+        caption_ids.extend(sentidf)
+        ids.extend(cocoidf)
         image_embeddings.extend(image_features)
         text_embeddings.extend(text_features)
 
@@ -117,7 +131,7 @@ def main(data_loader, sets):
         'text_embeddings': text_tensor
     }
 
-    out_dir = os.path.join(os.getcwd(), 'results')
+    out_dir = os.path.join(os.getcwd(), 'results_f')
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     
@@ -137,7 +151,7 @@ if __name__ == "__main__":
 
     start_time = datetime.datetime.now()
 
-    for sets in ['train', 'test', 'validation']:
+    for sets in ['train', 'validation']:
         start_time = datetime.datetime.now()
 
         data_loader = get_data_loaders(dataset[sets], batch_size = 20)
