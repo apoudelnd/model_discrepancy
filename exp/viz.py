@@ -34,38 +34,66 @@ def euclidean_dist(image_simmilarity, text_similarity):
 def img_text_sim(image_similarity, text_similarity):
     return cosine_similarity(image_similarity, text_similarity)
 
-def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets):
+def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id):
 
-    top_k = 60
+    top_k = 5
     normalized_sims = []
+    ratio_list = []
+    new_ratio_list = list()
+    top_ratios = []
+    bottom_ratios = []
+    sentence_ids = sent_id
 
     for i in range(id_tensor.shape[0]):
         # print(id_tensor[i])
         # print(image_similarity[i])
         # exit()
-        image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k, largest=True)
+        image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k+1, largest=True)
         image_neighbors_indices = image_nearest_neighbors.indices
+        # print(image_neighbors_indices)
         image_top_k_values = image_similarity[i][image_neighbors_indices]
+
+        coco_ids = id_tensor[image_neighbors_indices]
+        sent_ids = sentence_ids[image_neighbors_indices]
+        # print(image_top_k_values)
 
         image_embeddings = image_tensor[image_neighbors_indices]
         text_embeddings = text_tensor[image_neighbors_indices]
         similarities = cosine_similarity(image_embeddings, text_embeddings)
-        # print(similarities)
 
         similarities_tensor = torch.from_numpy(similarities)
+        # print(similarities_tensor)
+        sim_query = torch.diag(similarities_tensor)[0]
 
-        diagonal_sum = torch.diag(similarities_tensor).sum()
+        # ratio_list = [sim_query/sim for sim in torch.diag(similarities_tensor)[1:]]
 
-        for sim in torch.diag(similarities_tensor):
-            # Calculate the normalized similarity value
-            normalized_sim = sim / diagonal_sum
-            normalized_sims.append(normalized_sim)  # Add t
+        for sim, coco_id, sent_id in zip(torch.diag(similarities_tensor)[1:], coco_ids[1:], sent_ids[1:]):
+            ratio = sim_query / sim
+            ratio_list.append(ratio)
+            new_ratio_list.append((ratio, coco_id, sent_id))
         
-    # Flatten the normalized_sims list
-    flattened_sims = np.array(normalized_sims).flatten()
+        
+    ratio_sorted = sorted(new_ratio_list)
+
+    top_ratios.extend(ratio_sorted[-10:])  # Append top 10 ratios
+    bottom_ratios.extend(ratio_sorted[:10])  # Append bottom 10 ratios
+
+    #extract the items from the dictionary work on this later
+    print(top_ratios)
+    print(bottom_ratios)
+
+    # exit()
+
+    flattened_sims = np.array(ratio_list).flatten()
     normalized_flattened_sims = (flattened_sims - np.min(flattened_sims)) / (np.max(flattened_sims) - np.min(flattened_sims))
 
+    out_path = os.path.join(os.getcwd(), 'neigh_plots')
+    
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
     # print(sim)
+    print(len(ratio_list))
     plt.figure()
 
     # Create distribution plot
@@ -80,7 +108,8 @@ def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets):
     plt.xlabel('Normalized Similarity')
     plt.ylabel('Frequency')
     plt.title('Distribution of Normalized Similarity')
-    plt.savefig(f'histogram_{sets}_{top_k}.png')
+    final_path = os.path.join(out_path, f'kn_{sets}_{top_k}.png')
+    plt.savefig(final_path)
     # plt.show()
     
 
@@ -182,31 +211,25 @@ for sets in ['train', 'test', 'validation']:
     # Calculate cosine similarity between image embeddings
     image_similarity = cosine_similarity(image_tensor)
     
-    # print(image_similarity)
-    # print(image_similarity[0])
-    # print(image_similarity.shape[0])  
-    # exit()
-    # Calculate cosine similarity between text embeddings
     text_similarity = cosine_similarity(text_tensor)
 
-    neighbor_sim_exact_neigh(image_similarity, text_similarity, sets)
 
-    exit()
+    neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id)
 
-    #for top 5 neighbors experiment
-    ratio = neighbor_sim(image_similarity, text_similarity)
-    plot_dist(ratio, "topk_exp", sets, "nosig")
-    plot_dist(ratio, "topk_exp", sets, "sigmoid")
+    # #for top 5 neighbors experiment
+    # ratio = neighbor_sim(image_similarity, text_similarity)
+    # plot_dist(ratio, "topk_exp", sets, "nosig")
+    # plot_dist(ratio, "topk_exp", sets, "sigmoid")
 
 
-    #for normal experiment -- base case
+    # #for normal experiment -- base case
 
-    ratio = norm_exp(image_similarity, text_similarity)
+    # ratio = norm_exp(image_similarity, text_similarity)
 
-    plot_dist(ratio.flatten(), "norm_exp", sets, "nosig")
-    plot_dist(ratio.flatten(), "norm_exp", sets,  "sigmoid")
+    # plot_dist(ratio.flatten(), "norm_exp", sets, "nosig")
+    # plot_dist(ratio.flatten(), "norm_exp", sets,  "sigmoid")
 
-    print(f"Completed Working on {sets} set ************************")
+    # print(f"Completed Working on {sets} set ************************")
 
     # exit()
 
