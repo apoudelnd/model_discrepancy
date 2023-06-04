@@ -15,6 +15,8 @@ import datetime
 import pandas
 import torch.multiprocessing as mp
 mp.set_sharing_strategy('file_system')
+import PIL
+from PIL import UnidentifiedImageError
 
 
 from datasets import load_dataset
@@ -72,6 +74,9 @@ def main(data_loader, sets):
     image_embeddings = list()
     text_embeddings = list()
     caption_ids = list()
+    captions = list()
+    path = list()
+
 
     counter = 0
 
@@ -91,6 +96,7 @@ def main(data_loader, sets):
         image_fpath = list()
         captionf = list()
         sentidf = list()
+        image_inputs = list()
 
         for i, idx in enumerate(cocoid.tolist()):
             if idx not in set_ids:
@@ -100,8 +106,15 @@ def main(data_loader, sets):
                 image_fpath.append(image_path[i])
                 captionf.append(caption[i])
                 sentidf.append(sentid[i])
+
+        for img in image_fpath:
+            try:
+                image_inputs.append(preprocess_image(img))
+
+            except PIL.UnidentifiedImageError:
+                print(img)
         
-        image_inputs = [preprocess_image(img) for img in image_fpath]
+        # image_inputs = [preprocess_image(img) for img in image_fpath]
 
         text_inputs = preprocess_text(captionf)
 
@@ -112,12 +125,18 @@ def main(data_loader, sets):
             image_features = model.get_image_features(image_inputs)
             text_features = model.get_text_features(**text_inputs)
         
+        path.extend(image_fpath)
+        captions.extend(captionf)
         caption_ids.extend(sentidf)
         ids.extend(cocoidf)
         image_embeddings.extend(image_features)
         text_embeddings.extend(text_features)
 
-    # Convert lists to tensors
+    # Convert strings to tensors
+
+    # Stack the caption tensors
+    path_tensor = path
+    caption_tensor = captions
     cid_tensor = torch.stack(caption_ids)
     id_tensor = torch.stack(ids)
     image_tensor = torch.stack(image_embeddings)
@@ -128,10 +147,12 @@ def main(data_loader, sets):
         'ids': id_tensor,
         'sentid': cid_tensor,
         'image_embeddings': image_tensor,
-        'text_embeddings': text_tensor
+        'text_embeddings': text_tensor,
+        'captions': caption_tensor,
+        'img_path': path_tensor
     }
 
-    out_dir = os.path.join(os.getcwd(), 'results_f')
+    out_dir = os.path.join(os.getcwd(), 'results_final')
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     
@@ -151,7 +172,7 @@ if __name__ == "__main__":
 
     start_time = datetime.datetime.now()
 
-    for sets in ['train', 'validation']:
+    for sets in ['train', 'test', 'validation']:
         start_time = datetime.datetime.now()
 
         data_loader = get_data_loaders(dataset[sets], batch_size = 20)
