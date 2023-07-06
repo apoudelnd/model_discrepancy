@@ -34,7 +34,7 @@ def euclidean_dist(image_simmilarity, text_similarity):
 def img_text_sim(image_similarity, text_similarity):
     return cosine_similarity(image_similarity, text_similarity)
 
-def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor):
+def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor, project, label):
 
     top_k = 2
     normalized_sims = []
@@ -44,7 +44,8 @@ def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor,
     bottom_ratios = []
     sentence_ids = sent_id
 
-    for i in range(id_tensor.shape[0]):
+    # for i in range(len(id_tensor)):
+    for i in range(id_tensor.shape[0]): 
 
         image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k+1, largest=True)
         image_neighbors_indices = image_nearest_neighbors.indices
@@ -99,7 +100,10 @@ def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor,
     flattened_sims = np.array(ratio_list).flatten()
     normalized_flattened_sims = (flattened_sims - np.min(flattened_sims)) / (np.max(flattened_sims) - np.min(flattened_sims))
 
-    out_path = os.path.join(os.getcwd(), 'neigh_plots')
+    if project == 'fakeddit':
+        out_path = os.path.join(os.getcwd(), 'neigh_plots', 'fakeddit', f'{label}')
+    else:
+        out_path = os.path.join(os.getcwd(), 'neigh_plots')
     
     if not os.path.exists(out_path):
         os.makedirs(out_path)
@@ -119,83 +123,82 @@ def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor,
     plt.savefig(final_path)
     # plt.show()
 
-# def random_neighbors(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor):
-
-#     image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k+1, largest=True)
-#     image_neighbors_indices = image_nearest_neighbors.indices
-#     # print(image_neighbors_indices)
-#     image_top_k_values = image_similarity[i][image_neighbors_indices]
-
-
-#     image_embeddings = image_tensor[image_neighbors_indices]
-#     text_embeddings = text_tensor[image_neighbors_indices]
-
-
-#     similarities = cosine_similarity(image_embeddings, text_embeddings)
-#     all_similarities = cosine_similarity(image_embeddings, text_tensor)
-
-#     similarities_tensor = torch.from_numpy(similarities)
-#     # print(similarities_tensor)
-#     sim_query = torch.diag(similarities_tensor)[0]
-
-#     for sim, coco_id, sent_id, cap, pat in zip(torch.diag(similarities_tensor)[1:], coco_ids[1:], sent_ids[1:], caption[1:], path[1:]):
-#         ratio = sim_query / sim
-#         ratio_list.append(ratio)
-#         #caption[0] and path[0] are for the query! 
-#         new_ratio_list.append((ratio, coco_id, sent_id, cap, pat, caption[0], path[0]))
-
-
-
-
-
-
-
-    
-
-
-def neighbor_sim(image_similarity, text_similarity):
+def random_neighbors(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor, normalize):
 
     top_k = 5
+    sentence_ids = sent_id
+    all_ratios = list()
+    for i in range(id_tensor.shape[0]):
 
-    # zip(range(image_tensor.shape[0]), range(text_tensor.shape[0])):
-    #both of these are lists of tensors
-    img_ls_of_indices = list()
-    img_ls_of_values = list()
-
-    txt_ls_of_indices = list()
-    txt_ls_of_values = list()
-
-    print("Top 5 neigbors, and the ratio - processing....")
-
-    for i, j in zip(range(image_tensor.shape[0]), range(text_tensor.shape[0])):
-
-        image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k, largest=True)
+        image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k+1, largest=True)
         image_neighbors_indices = image_nearest_neighbors.indices
-        image_top_k_values = image_similarity[i][image_neighbors_indices]
         # print(image_neighbors_indices)
-        img_ls_of_indices.append(image_neighbors_indices)
-        img_ls_of_values.append(image_top_k_values)
+        image_top_k_values = image_similarity[i][image_neighbors_indices]
 
-        # print(image_top_k_values)
-
-        # Find the top k closest neighbors for the text
-        text_nearest_neighbors = torch.topk(torch.tensor(text_similarity[j]), k=top_k, largest=True)
-        text_neighbors_indices = text_nearest_neighbors.indices
-        text_top_k_values = text_similarity[j][text_neighbors_indices]
-
-        txt_ls_of_indices.append(text_neighbors_indices)
-        txt_ls_of_values.append(text_top_k_values)
+        coco_ids = id_tensor[image_neighbors_indices]
+        sent_ids = sentence_ids[image_neighbors_indices]
+        caption = [caption_tensor[i] for i in image_neighbors_indices.tolist()]
+        path = [path_tensor[i] for i in image_neighbors_indices.tolist()]
 
 
-        # print(text_neighbors_indices)
-        # print(text_top_k_values)
+        image_embeddings = image_tensor[image_neighbors_indices]
+        text_embeddings = text_tensor[image_neighbors_indices]
+
+        similarities = cosine_similarity(image_embeddings, text_embeddings)
+        # all_similarities = cosine_similarity(image_embeddings, text_tensor)
+
+        similarities_tensor = torch.from_numpy(similarities)
+    #     # print(similarities_tensor)
+        sim_query = torch.diag(similarities_tensor)[0]
+
+        import random
+        random.seed(42)
+
+        num_random_texts = 5
+        random_indices = random.sample(range(len(text_tensor)), num_random_texts)
+
+        random_text_tensors = text_tensor[random_indices]
+        random_sent_ids = [sentence_ids[index] for index in random_indices]
+
+        similarities_ran = cosine_similarity(image_embeddings, random_text_tensors)
+
+        ratio_values = sim_query / similarities_ran.flatten()
+        # print(ratio_values)
+
+        flattened_sims = np.array(ratio_values).flatten()
+       
+        all_ratios.extend(flattened_sims)
+
+    normalized_flattened_sims = (all_ratios - np.min(all_ratios)) / (np.max(all_ratios) - np.min(all_ratios))
+    out_path = os.path.join(os.getcwd(), 'ran_plots')
     
-    img_plain_list_val = [elem for tensor in img_ls_of_values for elem in tensor.tolist()]
-    txt_plain_list_val = [elem for tensor in txt_ls_of_values for elem in tensor.tolist()]
-    # Take the element-wise ratio of the two lists
-    ratio_list = [a / b for a, b in zip(img_plain_list_val, txt_plain_list_val)]
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
 
-    return ratio_list
+    # print(sim)
+    print(len(all_ratios))
+    plt.figure()
+
+    # Create distribution plot
+    sns.set_style('darkgrid')
+
+    if normalize:
+        sns.distplot(normalized_flattened_sims, kde=True, rug=True)
+        final_path = os.path.join(out_path, f'kn_{sets}_{top_k}nom.png')
+    else:
+        sns.distplot(all_ratios, kde=True, rug=True)
+        final_path = os.path.join(out_path, f'kn_{sets}_{top_k}unnom.png')
+
+    plt.xlabel('Normalized Similarity')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Normalized Similarity')
+    # if normalize:
+    #     final_path = os.path.join(out_path, f'kn_{sets}_{top_k}nom.png')
+    # else:
+    #     final_path = os.path.join(out_path, f'kn_{sets}_{top_k}nom.png')
+
+    plt.savefig(final_path)
+
 
 def norm_exp(image_similarity, text_similarity):
 
@@ -235,57 +238,38 @@ def plot_dist(ratio, exp_type, sets, cal_type):
     plt.savefig(f_path)
 
 
-#train's already done! work on test and validation for now!!
-for sets in ['train', 'test', 'validation']:
+project = "fakeddit"
+label = 2
 
-    print(f"Working on {sets} set")
 
-    loaded_data = torch.load(f'./results_final/{sets}_data.pt')
-    id_tensor = loaded_data['ids']
-    image_tensor = loaded_data['image_embeddings']
-    text_tensor = loaded_data['text_embeddings']
-    sent_id = loaded_data['sentid']
-    caption_tensor = loaded_data['captions']
-    path_tensor = loaded_data['img_path']
+if __name__ == "__main__":
 
-    # Calculate cosine similarity between image embeddings
-    image_similarity = cosine_similarity(image_tensor)
+    for project in ['fakeddit', 'ms_coco']:
+        print(f"Working on {project}")
+        for sets in ['train', 'test', 'validate']:
+            if project == "ms_coco":
+                loaded_data = torch.load(f'./results_final/{sets}_data.pt')
+            else:
+                loaded_data = torch.load(f'./results_final/fakeddit/{label}/{sets}_data.pt')
+        
+            id_tensor = loaded_data['ids']
+            image_tensor = loaded_data['image_embeddings']
+            text_tensor = loaded_data['text_embeddings']
+            sent_id = loaded_data['sentid']
+
+
+            caption_tensor = loaded_data['captions']
+            path_tensor = loaded_data['img_path']
+
+            # Calculate cosine similarity between image embeddings
+            image_similarity = cosine_similarity(image_tensor)
     
-    text_similarity = cosine_similarity(text_tensor)
+            text_similarity = cosine_similarity(text_tensor)
 
-
-    neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor)
-
-    break
-
-    # #for top 5 neighbors experiment
-    # ratio = neighbor_sim(image_similarity, text_similarity)
-    # plot_dist(ratio, "topk_exp", sets, "nosig")
-    # plot_dist(ratio, "topk_exp", sets, "sigmoid")
-
-
-    # #for normal experiment -- base case
-
-    # ratio = norm_exp(image_similarity, text_similarity)
-
-    # plot_dist(ratio.flatten(), "norm_exp", sets, "nosig")
-    # plot_dist(ratio.flatten(), "norm_exp", sets,  "sigmoid")
-
-    # print(f"Completed Working on {sets} set ************************")
-
-    # exit()
+            # random_neighbors(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor, False)
+            neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor, project, label = label)
+            exit()
+    
 
 
 
-
-
-
-# # Get the indices that sort the sigmoid_similarity_ratio array in ascending order
-# sorted_indices = np.argsort(sigmoid_similarity_ratio)
-
-# # Get the top 10 and bottom 10 combinations
-# top_10_combinations = [(i, j) for i, j in zip(*np.unravel_index(sorted_indices[-10:], similarity_ratio.shape))]
-# bottom_10_combinations = [(i, j) for i, j in zip(*np.unravel_index(sorted_indices[:10], similarity_ratio.shape))]
-
-# print(top_10_combinations)
-# print(bottom_10_combinations)
