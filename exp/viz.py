@@ -34,6 +34,62 @@ def euclidean_dist(image_simmilarity, text_similarity):
 def img_text_sim(image_similarity, text_similarity):
     return cosine_similarity(image_similarity, text_similarity)
 
+
+import torch
+
+def find_topk_neighbors(embedding1, embedding2, k):
+    # Convert input tensors to float dtype
+    embedding1 = embedding1.float()
+    embedding2 = embedding2.float()
+
+    # Compute cosine similarity between embedding1 and embedding2
+    similarity_matrix = torch.cosine_similarity(embedding1.unsqueeze(1), embedding2.unsqueeze(0), dim=2)
+
+    topk_similarities, topk_indices = torch.topk(similarity_matrix, k, dim=1)
+
+    return topk_indices
+
+
+def combine_neighbors(image_sim0, img_sim1, text_sim0, text_sim1, sent_id0, sent_id1):
+
+    k = 2
+    topk_neighbors = find_topk_neighbors(image_sim0, img_sim1, k)
+
+    ratios = []
+
+    for i, j, neighbors in zip(image_sim0, text_sim0, topk_neighbors):
+        topk_text_embeddings = text_sim1[neighbors]
+        topk_image_embeddings = img_sim1[neighbors]
+
+        sim_query = torch.cosine_similarity(i.unsqueeze(0), j.unsqueeze(0), dim=1)
+        # print(sim_query)
+
+        for t_embed, i_embed in zip(topk_text_embeddings, topk_image_embeddings):
+            ratio = sim_query / torch.cosine_similarity(t_embed.unsqueeze(0), i_embed.unsqueeze(0), dim=1)
+            ratios.append(ratio.item())
+
+    # print(ratios)
+
+    plt.figure()
+
+    out_path = os.path.join(os.getcwd(), 'neigh_plots', 'fakeddit', 'test05')
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+    # Create distribution plot
+    sns.set_style('darkgrid')
+
+    sns.distplot(ratios, kde=True, rug=True)
+    plt.xlabel('Normalized Similarity')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Normalized Similarity')
+    final_path = os.path.join(out_path, 'test05.png')
+    plt.savefig(final_path)
+
+    exit()
+        
+
+
+
 def neighbor_sim_exact_neigh(image_similarity, text_similarity, sets, id_tensor, sent_id, caption_tensor, path_tensor, project, label):
 
     top_k = 2
@@ -128,6 +184,8 @@ def random_neighbors(image_similarity, text_similarity, sets, id_tensor, sent_id
     top_k = 5
     sentence_ids = sent_id
     all_ratios = list()
+
+    #10k samples -- run this
     for i in range(id_tensor.shape[0]):
 
         image_nearest_neighbors = torch.topk(torch.tensor(image_similarity[i]), k=top_k+1, largest=True)
@@ -239,7 +297,7 @@ def plot_dist(ratio, exp_type, sets, cal_type):
 
 
 project = "fakeddit"
-label = 2
+label = 5
 
 
 if __name__ == "__main__":
@@ -260,6 +318,17 @@ if __name__ == "__main__":
 
             caption_tensor = loaded_data['captions']
             path_tensor = loaded_data['img_path']
+
+            #loading for label == 0
+
+            loaded_data0 = torch.load(f'./results_final/fakeddit/0/{sets}_data.pt')
+            image_tensor0 = loaded_data0['image_embeddings']
+            text_tensor0 = loaded_data0['text_embeddings']
+            sent_id0 = loaded_data0['sentid']
+
+            combine_neighbors(image_tensor0, image_tensor, text_tensor0, text_tensor, sent_id0, sent_id)
+
+            exit()
 
             # Calculate cosine similarity between image embeddings
             image_similarity = cosine_similarity(image_tensor)
